@@ -27,7 +27,7 @@ setup(
     name='pseq',
     version=get_version('src', 'pseq', '__init__.py'),
     description='A framework for parallel processing of sequences.',
-    long_description=read('README.md'),
+    long_description=read('README.rst'),
     url='https://github.com/luismsgomes/pseq',
     author='Luís Gomes',
     author_email='luismsgomes@gmail.com',
