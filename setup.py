@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 from os import path
 import re
 
@@ -41,4 +41,5 @@ setup(
     keywords='sequence parallel multiprocessing process subprocess',
     install_requires=[],
     package_dir={'': 'src'},
+    packages=find_packages('src'),
 )
