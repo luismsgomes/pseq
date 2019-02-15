@@ -1,9 +1,11 @@
 Parallel Sequence Processing
 ============================
 
-This package provices a framework for parallel processing of sequences.
+This package provides a framework for parallel processing of sequences.
 
 Copyright ® 2019, Luís Gomes luismsgomes@gmail.com. All rights reserved.
+
+Links: https://github.com/luismsgomes/pseq | https://pypi.org/project/pseq/
 
 There are four main concepts in this package, each one modeled as a
 class:
