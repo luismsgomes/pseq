@@ -33,6 +33,10 @@ class PolymorphicProducer(Producer):
             raise TypeError("producer not instance of JobProducer")
         self.producers[producer.get_job_class()] = producer
 
+    def init(self):
+        for producer in self.producers.values():
+            producer.init()
+
     def produce(self):
         job = self.job_queue.get()
         while not isinstance(job, Shutdown):
@@ -50,6 +54,10 @@ class PolymorphicProcessor(Processor):
     def register(self, data_cls, processor):
         self.processors[data_cls] = processor
 
+    def init(self):
+        for processor in self.processors.values():
+            processor.init()
+
     def process(self, data):
         processor = self.processors[data.__class__]
         return processor.process(data)
@@ -65,6 +73,10 @@ class PolymorphicConsumer(Consumer):
 
     def register(self, data_cls, consumer):
         self.consumers[data_cls] = consumer
+
+    def init(self):
+        for consumer in self.consumers.values():
+            consumer.init()
 
     def consume(self, data, result, exception):
         consumer = self.consumers[data.__class__]

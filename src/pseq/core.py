@@ -94,6 +94,7 @@ def process(processor, todo_queue, done_queue):
 
 
 def produce(producer, todo_queue, n_processors):
+    producer.init()
     serial = count(start=1)
     for data in producer.produce():
         work_unit = WorkUnit(next(serial), data)
@@ -138,6 +139,7 @@ def arrange_work_units_in_order(work_units):
 
 
 def consume(consumer, done_queue, n_processors, require_in_order):
+    consumer.init()
     work_units = get_done_work_units(done_queue, n_processors)
     if require_in_order:
         work_units = arrange_work_units_in_order(work_units)
