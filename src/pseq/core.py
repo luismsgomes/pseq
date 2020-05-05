@@ -1,8 +1,7 @@
-from datetime import datetime
-from enum import Enum
-from itertools import count, chain
-from multiprocessing import cpu_count, Process, Queue
-from os import getpid
+import datetime
+import itertools
+import os
+import multiprocessing
 import logging
 
 
@@ -47,7 +46,7 @@ class WorkUnit(object):
 
     class Event(object):
         def __init__(self, *args, **kwargs):
-            self.ts = datetime.now()
+            self.ts = datetime.datetime.now()
             self.args = args
             self.kwargs = kwargs
 
@@ -73,7 +72,7 @@ class Shutdown(WorkUnit):
 
 
 def process(processor, todo_queue, done_queue):
-    pid = getpid()
+    pid = os.getpid()
     processor.init()
     work_unit = None
     while not isinstance(work_unit, Shutdown):
@@ -95,7 +94,7 @@ def process(processor, todo_queue, done_queue):
 
 def produce(producer, todo_queue, n_processors):
     producer.init()
-    serial = count(start=1)
+    serial = itertools.count(start=1)
     for data in producer.produce():
         work_unit = WorkUnit(next(serial), data)
         work_unit.log_event(WorkUnit.Produced())
@@ -121,7 +120,7 @@ def get_done_work_units(done_queue, n_processors):
 
 
 def arrange_work_units_in_order(work_units):
-    serial = count(start=1)
+    serial = itertools.count(start=1)
     next_serial = next(serial)
     on_hold = dict()
     for work_unit in work_units:
@@ -152,14 +151,19 @@ def consume(consumer, done_queue, n_processors, require_in_order):
 
 
 class ParallelSequenceProcessor(object):
-    def __init__(self, producer, processor, consumer, n_processors=None, require_in_order=None):
+    def __init__(self, producer, processor, consumer, n_processors=None, require_in_order=None, fork_method='forkserver'):
         """
         Creates sub-processes to generate, process and consume a sequence of WorkUnits in parallel.
+
+        Argument fork_method must be either 'fork', 'spawn' or 'forkserver' (default).
+        See https://docs.python.org/3/library/multiprocessing.html?highlight=multiprocessing#multiprocessing.get_context
+
         """
+        mp_context = multiprocessing.get_context(method=fork_method)
         if require_in_order is None:
             require_in_order = True
         if n_processors is None:
-            n_processors = cpu_count()
+            n_processors = mp_context.cpu_count()
         if not isinstance(producer, Producer):
             raise TypeError("producer not an instance of Producer")
         if not isinstance(processor, Processor):
@@ -167,22 +171,22 @@ class ParallelSequenceProcessor(object):
         if not isinstance(consumer, Consumer):
             raise TypeError("consumer not an instance of Consumer")
         self.n_processors = n_processors
-        self.todo_queue = Queue(maxsize=2*n_processors)
-        self.done_queue = Queue(maxsize=2*n_processors)
+        self.todo_queue = mp_context.Queue(maxsize=2*n_processors)
+        self.done_queue = mp_context.Queue(maxsize=2*n_processors)
         LOG.info(f"{self}: creating producer and consumer processes")
         self.procs = [
-            Process(
+            mp_context.Process(
                 target=produce,
                 args=(producer, self.todo_queue, n_processors),
             ),
-            Process(
+            mp_context.Process(
                 target=consume,
                 args=(consumer, self.done_queue, n_processors, require_in_order),
             ),
         ]
         LOG.info(f"{self}: creating {n_processors} processor processes")
         self.procs.extend(
-            Process(
+            mp_context.Process(
                 target=process,
                 args=(processor, self.todo_queue, self.done_queue)
             )
