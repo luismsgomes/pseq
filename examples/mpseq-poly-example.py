@@ -74,7 +74,6 @@ class SleepProducer(JobProducer):
     def shutdown(self):
         print("SleepProducer shutting down")
 
-
     def get_job_class(self):
         return SleepJob
 
@@ -113,7 +112,7 @@ def main():
 
     # could do other things here
 
-    processor.join() # wait for all sub-procs to finish
+    processor.join()  # wait for all sub-procs to finish
 
 
 if __name__ == "__main__":

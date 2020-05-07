@@ -151,7 +151,15 @@ def consume(consumer, done_queue, n_processors, require_in_order):
 
 
 class ParallelSequenceProcessor(object):
-    def __init__(self, producer, processor, consumer, n_processors=None, require_in_order=None, mp_context=None):
+    def __init__(
+        self,
+        producer,
+        processor,
+        consumer,
+        n_processors=None,
+        require_in_order=None,
+        mp_context=None,
+    ):
         """
         Creates sub-processes to generate, process and consume a sequence of WorkUnits in parallel.
 
@@ -172,13 +180,12 @@ class ParallelSequenceProcessor(object):
         if not isinstance(consumer, Consumer):
             raise TypeError("consumer not an instance of Consumer")
         self.n_processors = n_processors
-        self.todo_queue = mp_context.Queue(maxsize=2*n_processors)
-        self.done_queue = mp_context.Queue(maxsize=2*n_processors)
+        self.todo_queue = mp_context.Queue(maxsize=2 * n_processors)
+        self.done_queue = mp_context.Queue(maxsize=2 * n_processors)
         LOG.info(f"{self}: creating producer and consumer processes")
         self.procs = [
             mp_context.Process(
-                target=produce,
-                args=(producer, self.todo_queue, n_processors),
+                target=produce, args=(producer, self.todo_queue, n_processors),
             ),
             mp_context.Process(
                 target=consume,
@@ -188,8 +195,7 @@ class ParallelSequenceProcessor(object):
         LOG.info(f"{self}: creating {n_processors} processor processes")
         self.procs.extend(
             mp_context.Process(
-                target=process,
-                args=(processor, self.todo_queue, self.done_queue)
+                target=process, args=(processor, self.todo_queue, self.done_queue)
             )
             for _ in range(n_processors)
         )
