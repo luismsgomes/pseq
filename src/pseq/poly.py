@@ -88,12 +88,12 @@ class PolymorphicConsumer(Consumer):
 
 
 class PolymorphicParallelSequenceProcessor(ParallelSequenceProcessor):
-    def __init__(self, job_queue, n_processors=None, require_in_order=None):
+    def __init__(self, job_queue, n_processors=None, require_in_order=None, mp_context=None):
         self.job_queue = job_queue
         self.poly_producer = PolymorphicProducer(job_queue)
         self.poly_processor = PolymorphicProcessor()
         self.poly_consumer = PolymorphicConsumer()
-        super().__init__(self.poly_producer, self.poly_processor, self.poly_consumer, n_processors, require_in_order)
+        super().__init__(self.poly_producer, self.poly_processor, self.poly_consumer, n_processors, require_in_order, mp_context=mp_context)
 
     def register(self, producer, processor, consumer):
         if not isinstance(producer, JobProducer):
