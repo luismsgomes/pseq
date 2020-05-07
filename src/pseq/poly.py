@@ -1,8 +1,4 @@
-import logging
 from pseq.core import ParallelSequenceProcessor, Producer, Processor, Consumer
-
-
-LOG = logging.getLogger(__name__)
 
 
 class Shutdown(object):
