@@ -151,15 +151,16 @@ def consume(consumer, done_queue, n_processors, require_in_order):
 
 
 class ParallelSequenceProcessor(object):
-    def __init__(self, producer, processor, consumer, n_processors=None, require_in_order=None, fork_method='forkserver'):
+    def __init__(self, producer, processor, consumer, n_processors=None, require_in_order=None, mp_context=None):
         """
         Creates sub-processes to generate, process and consume a sequence of WorkUnits in parallel.
 
-        Argument fork_method must be either 'fork', 'spawn' or 'forkserver' (default).
+        Argument mp_context must be obtained by calling multiprocessing.get_context().
         See https://docs.python.org/3/library/multiprocessing.html?highlight=multiprocessing#multiprocessing.get_context
 
         """
-        mp_context = multiprocessing.get_context(method=fork_method)
+        if mp_context is None:
+            mp_context = multiprocessing.get_context(method='forkserver')
         if require_in_order is None:
             require_in_order = True
         if n_processors is None:
