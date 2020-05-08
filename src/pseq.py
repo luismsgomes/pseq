@@ -131,10 +131,11 @@ class ParallelSequencePipeline(object):
         mp_context=None,
     ):
         """
-        Creates sub-processes to generate, process and consume a sequence of WorkUnits in parallel.
+        Processes a sequence in parallel.
 
-        Argument mp_context must be obtained by calling multiprocessing.get_context().
-        See https://docs.python.org/3/library/multiprocessing.html?highlight=multiprocessing#multiprocessing.get_context
+        Argument mp_context must be obtained by calling
+        multiprocessing.get_context().
+        See https://docs.python.org/3/library/multiprocessing.html
 
         """
         if mp_context is None:
@@ -244,13 +245,13 @@ def produce(
                 )
                 job.status.incr_produced()
                 work_unit_input_queue.put(work_unit)
-        except:  # if producer.produce() crashes
+        except:  # noqa E722
             traceback.print_exc()
         job.status.stopped_producing()
         job_serial = job_input_queue.get()
     try:
         producer.shutdown()
-    except:
+    except:  # noqa E722
         traceback.print_exc()
     for _ in range(n_processors):
         shutdown_unit = Shutdown(next(work_unit_serial))
@@ -265,7 +266,7 @@ def process(processor, work_unit_input_queue, active_jobs, work_unit_output_queu
         if isinstance(work_unit, Shutdown):
             try:
                 processor.shutdown()
-            except:
+            except:  # noqa E722
                 traceback.print_exc()
                 pass
         else:
@@ -296,7 +297,7 @@ def consume(
             job = active_jobs[work_unit.job_serial]
             try:
                 consumer.consume(work_unit.data, work_unit.result, work_unit.exception)
-            except:
+            except:  # noqa E722
                 traceback.print_exc()
             job.status.incr_consumed()
             if not job.status.running:
