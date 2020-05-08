@@ -45,13 +45,9 @@ produced before them have been processed and passed onto the
 Usage
 -----
 
-Currently, the only documentation available are two usage examples.
+Currently, the only documentation available is the example code provided 
+in ``examples/mpseq-core-example.py``.
 
-See ``examples/mpseq-core-example.py`` for the simplest scenario:
-processing a single sequence of a single type.
-
-See ``examples/mpseq-poly-example.py`` for an example of processing
-multiple sequences of different types.
 
 License
 -------
