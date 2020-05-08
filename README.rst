@@ -46,7 +46,7 @@ Usage
 -----
 
 Currently, the only documentation available is the example code provided 
-in ``examples/mpseq-core-example.py``.
+in ``example.py``.
 
 
 License
