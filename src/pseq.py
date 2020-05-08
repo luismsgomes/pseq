@@ -225,7 +225,10 @@ class ParallelSequencePipeline(object):
         serial = self.job_output_queue.get()
         return self.active_jobs.pop(serial)
 
-def produce(producer, job_input_queue, active_jobs, work_unit_input_queue, n_processors):
+
+def produce(
+    producer, job_input_queue, active_jobs, work_unit_input_queue, n_processors
+):
     producer.init()
     work_unit_serial = itertools.count(start=1)
     job_serial = job_input_queue.get()
@@ -277,7 +280,12 @@ def process(processor, work_unit_input_queue, active_jobs, work_unit_output_queu
 
 
 def consume(
-    consumer, work_unit_output_queue, active_jobs, job_output_queue, n_processors, require_in_order
+    consumer,
+    work_unit_output_queue,
+    active_jobs,
+    job_output_queue,
+    n_processors,
+    require_in_order,
 ):
     consumer.init()
     work_units = get_done_work_units(work_unit_output_queue, n_processors)

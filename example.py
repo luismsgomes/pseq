@@ -64,8 +64,8 @@ def main():
     )
     print(f"calling pipeline.start() @pid={getpid()}")
     pipeline.start()
-    
-    sleep(1) # simulate other things being done
+
+    sleep(1)  # simulate other things being done
 
     jobs_data = [3, 5, 4]
     jobs = []
@@ -77,8 +77,8 @@ def main():
         print(f"submitted job {job.serial} @pid={getpid()}")
 
     while True:
-        
-        sleep(1) # simulate other things being done
+
+        sleep(1)  # simulate other things being done
 
         print("finished jobs:")
         finished = pipeline.fetch()
@@ -92,8 +92,6 @@ def main():
             print("  ", job)
         if not any(job.status.running for job in jobs):
             break
-
-
 
     print(f"calling pipeline.shutdown() @pid={getpid()}")
     pipeline.shutdown()
