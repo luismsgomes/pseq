@@ -5,7 +5,7 @@ import re
 # https://setuptools.readthedocs.io/en/latest/
 setup(
     name="pseq",
-    version="0.3.1",
+    version="1.0.0",
     description="A framework for parallel processing of sequences.",
     long_description=open("README.rst", "rt").read(),
     url="https://github.com/luismsgomes/pseq",
