@@ -1,7 +1,15 @@
 from os import getpid
-from pseq.core import ParallelSequencePipeline, Producer, Processor, Consumer
+from pseq import ParallelSequencePipeline, Producer, Processor, Consumer
 from random import random, choice
 from time import sleep
+from collections import namedtuple
+
+
+JobData = namedtuple("JobData", "n_units")
+
+ChunkData = namedtuple("ChunkData", "secs_to_sleep")
+
+ProcessedChunkData = namedtuple("ProcessedChunkData", "secs_slept")
 
 
 class TimeProducer(Producer):
@@ -11,10 +19,10 @@ class TimeProducer(Producer):
     def init(self):
         print(f"  TimeProducer.init() @pid={getpid()}")
 
-    def produce(self, n):
+    def produce(self, job_data):
         print(f"  TimeProducer.produce() @pid={getpid()}")
-        for _ in range(n):
-            yield random() * 3
+        for _ in range(job_data.n_units):
+            yield ChunkData(random() * 3)
 
     def shutdown(self):
         print(f"  TimeProducer.shutdown() @pid={getpid()}")
@@ -27,13 +35,14 @@ class TimeProcessor(Processor):
     def init(self):
         print(f"  TimeProcessor.init() @pid={getpid()}")
 
-    def process(self, secs):
-        print(f"  TimeProcessor.process(secs={secs:.2f}) @pid={getpid()}")
-        slept_secs = choice([secs, secs, secs / 2])
-        sleep(slept_secs)
+    def process(self, job_data, chunk_data):
+        secs = chunk_data.secs_to_sleep
+        print(f"  TimeProcessor.process(chunk_data.segs_to_sleep={secs:.2f}) @pid={getpid()}")
+        secs_slept = choice([secs, secs, secs / 2])
+        sleep(secs_slept)
         if choice([True, False, False, False]):
             raise Exception("example exception")
-        return slept_secs
+        return ProcessedChunkData(secs_slept)
 
     def shutdown(self):
         print(f"  TimeProcessor.shutdown() @pid={getpid()}")
@@ -46,12 +55,17 @@ class TimeConsumer(Consumer):
     def init(self):
         print(f"  TimeConsumer.init() @pid={getpid()}")
 
-    def consume(self, given_secs, slept_secs, exception):
+    def consume(self, job_data, chunk_data, processed_chunk_data, exception):
         print(
-            f"  TimeConsumer.consume(given_secs={given_secs:.2f},"
-            + " slept_secs="
-            + ("None" if slept_secs is None else f"{slept_secs:.2f}")
-            + f" exception={exception!r}) @pid={getpid()}"
+            f"  TimeConsumer.consume(\n"
+            + f"    chunk_data.secs_to_sleep={chunk_data.secs_to_sleep:.2f},\n"
+            + f"    chunk_data.secs_slept="
+            + (
+                "None,\n" if processed_chunk_data is None
+                else f"{processed_chunk_data.secs_slept:.2f},\n"
+            )
+            + f"    exception={exception!r}\n"
+            + f"  ) @pid={getpid()}"
         )
 
     def shutdown(self):
@@ -67,7 +81,7 @@ def main():
 
     sleep(1)  # simulate other things being done
 
-    jobs_data = [3, 5, 4]
+    jobs_data = [JobData(3), JobData(5), JobData(4)]
     jobs = []
 
     for data in jobs_data:

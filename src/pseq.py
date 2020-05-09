@@ -272,7 +272,7 @@ def process(processor, work_unit_input_queue, active_jobs, work_unit_output_queu
         else:
             job = active_jobs[work_unit.job_serial]
             try:
-                work_unit.result = processor.process(work_unit.data)
+                work_unit.result = processor.process(job.data, work_unit.data)
                 job.status.incr_processed()
             except Exception as exception:
                 work_unit.exception = exception
@@ -296,7 +296,9 @@ def consume(
         if not isinstance(work_unit, Shutdown):
             job = active_jobs[work_unit.job_serial]
             try:
-                consumer.consume(work_unit.data, work_unit.result, work_unit.exception)
+                consumer.consume(
+                    job.data, work_unit.data, work_unit.result, work_unit.exception
+                )
             except:  # noqa E722
                 traceback.print_exc()
             job.status.incr_consumed()
