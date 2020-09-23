@@ -1,11 +1,15 @@
 import itertools
+import logging
 import multiprocessing
+import os
 import traceback
-
 
 __version__ = "1.0.0"
 
 __author__ = "Luís Gomes"
+
+
+LOG = logging.getLogger(__name__)
 
 
 class Job(object):
@@ -15,7 +19,7 @@ class Job(object):
         self.status = status
 
     def __str__(self):
-        return f"Job {self.serial} {self.status}"
+        return f"Job {self.serial}, {self.status}"
 
     def __eq__(self, other):
         return isinstance(other, Job) and other.serial == self.serial
@@ -24,7 +28,11 @@ class Job(object):
 class Status(object):
     def __init__(self, manager):
         self.d = manager.dict(
-            producing=False, produced=0, processed=0, failed=0, consumed=0,
+            producing=False,
+            produced=0,
+            processed=0,
+            failed=0,
+            consumed=0,
         )
 
     @property
@@ -90,6 +98,9 @@ class Component(object):
     def shutdown(self):
         pass
 
+    def __str__(self):
+        return f"{self.__class__.__name__} pid={os.getpid()} ppid={os.getppid()}"
+
 
 class Producer(Component):
     def produce(self, data):
@@ -107,12 +118,21 @@ class Consumer(Component):
 
 
 class WorkUnit(object):
-    def __init__(self, job_serial, serial, data):
-        self.job_serial = job_serial
+    def __init__(self, serial, job_serial, data):
         self.serial = serial
+        self.job_serial = job_serial
         self.data = data
         self.result = None
         self.exception = None
+
+    def __str__(self):
+        data = "None" if self.data is None else "<...>"
+        result = "None" if self.result is None else "<...>"
+        exception = "None" if self.exception is None else "<...>"
+        return (
+            f"WorkUnit {self.serial} job_serial={self.job_serial} "
+            f"data={data} result={result} exception={exception}"
+        )
 
 
 class Shutdown(WorkUnit):
@@ -210,11 +230,13 @@ class ParallelSequencePipeline(object):
             proc.join()
 
     def __str__(self):
-        return f"{self.__class__.__name__}()"
+        return f"{self.__class__.__name__} pid={os.getpid()} ppid={os.getppid()}"
 
     def submit(self, job_data):
         job = Job(
-            serial=next(self.job_serial), data=job_data, status=Status(self.mp_manager),
+            serial=next(self.job_serial),
+            data=job_data,
+            status=Status(self.mp_manager),
         )
         self.active_jobs[job.serial] = job
         self.job_input_queue.put(job.serial)
@@ -227,6 +249,13 @@ class ParallelSequencePipeline(object):
         return self.active_jobs.pop(serial)
 
 
+def _log_gen_exc(gen, logmsg):
+    try:
+        yield from gen
+    except:  # noqa E722
+        LOG.exception(logmsg)
+
+
 def produce(
     producer, job_input_queue, active_jobs, work_unit_input_queue, n_processors
 ):
@@ -236,23 +265,21 @@ def produce(
     while job_serial is not None:
         job = active_jobs[job_serial]
         job.status.started_producing()
-        try:
-            for work_unit_data in producer.produce(job.data):
-                work_unit = WorkUnit(
-                    job_serial=job_serial,
-                    serial=next(work_unit_serial),
-                    data=work_unit_data,
-                )
-                job.status.incr_produced()
-                work_unit_input_queue.put(work_unit)
-        except:  # noqa E722
-            traceback.print_exc()
+        logmsg = f"[{producer}] raised exception while producing work units for [{job}]"
+        for work_unit_data in _log_gen_exc(producer.produce(job.data), logmsg):
+            work_unit = WorkUnit(
+                serial=next(work_unit_serial),
+                job_serial=job_serial,
+                data=work_unit_data,
+            )
+            job.status.incr_produced()
+            work_unit_input_queue.put(work_unit)
         job.status.stopped_producing()
         job_serial = job_input_queue.get()
     try:
         producer.shutdown()
     except:  # noqa E722
-        traceback.print_exc()
+        LOG.exception(f"[{producer}] raised exception while shutting down")
     for _ in range(n_processors):
         shutdown_unit = Shutdown(next(work_unit_serial))
         work_unit_input_queue.put(shutdown_unit)
@@ -267,15 +294,16 @@ def process(processor, work_unit_input_queue, active_jobs, work_unit_output_queu
             try:
                 processor.shutdown()
             except:  # noqa E722
-                traceback.print_exc()
-                pass
+                work_unit.exception = traceback.format_exc()
+                LOG.exception(f"[{processor}] raised exception while shutting down")
         else:
             job = active_jobs[work_unit.job_serial]
             try:
                 work_unit.result = processor.process(job.data, work_unit.data)
                 job.status.incr_processed()
-            except Exception as exception:
-                work_unit.exception = exception
+            except:  # noqa E722
+                work_unit.exception = traceback.format_exc()
+                LOG.exception(f"[{processor}] failed to process [{work_unit}]")
                 job.status.incr_failed()
         work_unit_output_queue.put(work_unit)
 
@@ -300,7 +328,7 @@ def consume(
                     job.data, work_unit.data, work_unit.result, work_unit.exception
                 )
             except:  # noqa E722
-                traceback.print_exc()
+                LOG.exception(f"[{consumer}] failed to consume [{work_unit}] of [{job}]")
             job.status.incr_consumed()
             if not job.status.running:
                 job_output_queue.put(job.serial)

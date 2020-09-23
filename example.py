@@ -37,7 +37,10 @@ class TimeProcessor(Processor):
 
     def process(self, job_data, chunk_data):
         secs = chunk_data.secs_to_sleep
-        print(f"  TimeProcessor.process(chunk_data.segs_to_sleep={secs:.2f}) @pid={getpid()}")
+        print(
+            f"  TimeProcessor.process(chunk_data.segs_to_sleep={secs:.2f}) "
+            f"@pid={getpid()}"
+        )
         secs_slept = choice([secs, secs, secs / 2])
         sleep(secs_slept)
         if choice([True, False, False, False]):
@@ -57,11 +60,12 @@ class TimeConsumer(Consumer):
 
     def consume(self, job_data, chunk_data, processed_chunk_data, exception):
         print(
-            f"  TimeConsumer.consume(\n"
+            "  TimeConsumer.consume(\n"
             + f"    chunk_data.secs_to_sleep={chunk_data.secs_to_sleep:.2f},\n"
-            + f"    chunk_data.secs_slept="
+            + "    chunk_data.secs_slept="
             + (
-                "None,\n" if processed_chunk_data is None
+                "None,\n"
+                if processed_chunk_data is None
                 else f"{processed_chunk_data.secs_slept:.2f},\n"
             )
             + f"    exception={exception!r}\n"

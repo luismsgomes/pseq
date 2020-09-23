@@ -1,6 +1,4 @@
-from setuptools import setup, find_packages
-from os import path
-import re
+from setuptools import setup
 
 # https://setuptools.readthedocs.io/en/latest/
 setup(
