@@ -29,6 +29,9 @@ class TimeProducer(Producer):
         for _ in range(job_data.n_units):
             yield ChunkData(random() * 3)
 
+    def shutdown(self):
+        LOG.info(f"TimeProducer.shutdown() @pid={getpid()}")
+
 
 class TimeProcessor(Processor):
     def __init__(self):
@@ -49,6 +52,9 @@ class TimeProcessor(Processor):
         if choice([True, False, False, False]):
             raise Exception("example exception")
         return ProcessedChunkData(secs_slept)
+
+    def shutdown(self):
+        LOG.info(f"TimeProcessor.shutdown() @pid={getpid()}")
 
 
 class TimeConsumer(Consumer):
@@ -73,44 +79,73 @@ class TimeConsumer(Consumer):
             + f") @pid={getpid()}"
         )
 
+    def shutdown(self):
+        LOG.info(f"TimeConsumer.shutdown() @pid={getpid()}")
 
-def main():
-    logging.basicConfig(level=logging.DEBUG)
+
+def example(jobs_data, priority_lanes, example_name):
+    LOG.info(f"{example_name}: starting @pid={getpid()}")
     pipeline = ParallelSequencePipeline(
-        TimeProducer(), TimeProcessor(), TimeConsumer(), n_processors=2
+        TimeProducer(),
+        TimeProcessor(),
+        TimeConsumer(),
+        n_processors=2,
+        priority_lanes=priority_lanes,
     )
-    LOG.info(f"calling pipeline.start() @pid={getpid()}")
+    LOG.info(f"{example_name}: calling pipeline.start() @pid={getpid()}")
     pipeline.start()
 
     sleep(1)  # simulate other things being done
 
-    jobs_data = [JobData(3), JobData(5), JobData(4)]
     jobs = []
 
-    for data in jobs_data:
-        LOG.info(f"calling pipeline.submit({data}) @pid={getpid()}")
-        job = pipeline.submit(data)
+    for priority, data in jobs_data:
+        LOG.info(
+            f"{example_name}: calling pipeline.submit({data}, priority={priority}) @pid={getpid()}"
+        )
+        job = pipeline.submit(data, priority=priority)
         jobs.append(job)
-        LOG.info(f"submitted job {job.serial} @pid={getpid()}")
+        LOG.info(f"{example_name}: submitted job {job.serial} @pid={getpid()}")
 
     while True:
 
         sleep(1)  # simulate other things being done
 
-        LOG.info("finished jobs:")
+        LOG.info(f"{example_name}: finished jobs:")
         finished = pipeline.fetch()
         while finished is not None:
             LOG.info(f"{finished}")
             jobs = [job for job in jobs if job != finished]
             finished = pipeline.fetch()
         # print other job status
-        LOG.info("other jobs:")
+        LOG.info(f"{example_name}: other jobs:")
         for job in jobs:
             LOG.info(f"{job}")
         if not any(job.status.running for job in jobs):
             break
-    LOG.info("calling pipeline.close()")
-    pipeline.close()
+    LOG.info(f"{example_name}: calling pipeline.shutdown() @pid={getpid()}")
+    pipeline.shutdown()
+    LOG.info(f"{example_name}: pipeline has been shutdown @pid={getpid()}")
+
+
+def main():
+    logging.basicConfig(level=logging.DEBUG)
+
+    # (priority, jobdata)
+    jobs_data = [(0, JobData(3)), (0, JobData(5)), (0, JobData(4))]
+    example(jobs_data, None, "[1]")
+
+    # (priority, jobdata)
+    jobs_data = [
+        (1, JobData(3)),
+        (0, JobData(5)),
+        (1, JobData(4)),
+        (1, JobData(5)),
+        (0, JobData(6)),
+        (1, JobData(2)),
+    ]
+    example(jobs_data, [2, 1], "[2,1]")
+
     LOG.info("main() has finished")
 
 

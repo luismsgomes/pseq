@@ -4,7 +4,7 @@ import multiprocessing
 import multiprocessing.managers
 import queue
 import os
-import traceback
+
 
 __version__ = "1.1.0"
 
@@ -113,6 +113,9 @@ class Component(object):
     def init(self):
         pass
 
+    def shutdown(self):
+        pass
+
     def __str__(self):
         return f"{self.__class__.__name__} pid={os.getpid()} ppid={os.getppid()}"
 
@@ -133,11 +136,11 @@ class Consumer(Component):
 
 
 class WorkUnit(object):
-    def __init__(self, lane, priority, serial, job_serial, data):
-        self.lane = lane
+    def __init__(self, priority, job_serial, serial, lane, data):
         self.priority = priority
-        self.serial = serial
         self.job_serial = job_serial
+        self.serial = serial
+        self.lane = lane
         self.data = data
         self.result = None
         self.exception = None
@@ -147,26 +150,26 @@ class WorkUnit(object):
         result = "None" if self.result is None else "<...>"
         exception = "None" if self.exception is None else "<...>"
         return (
-            f"WorkUnit priority={self.priority}, lane={self.lane}, "
-            f"serial={self.serial}, job_serial={self.job_serial}, "
-            f"data={data}, result={result}, exception={exception}"
+            f"WorkUnit priority={self.priority}, job_serial={self.job_serial}, "
+            f"serial={self.serial}, lane={self.lane}, data={data}, "
+            f"result={result}, exception={exception}"
         )
 
     def __eq__(self, other):
-        return (self.priority, self.serial, self.job_serial) == (
+        return (self.priority, self.job_serial, self.serial) == (
             other.priority,
-            other.serial,
             other.job_serial,
+            other.serial,
         )
 
     def __ne__(self, other):
         return not (self == other)
 
     def __lt__(self, other):
-        return (self.priority, self.serial, self.job_serial) < (
+        return (self.priority, self.job_serial, self.serial) < (
             other.priority,
-            other.serial,
             other.job_serial,
+            other.serial,
         )
 
     def __le__(self, other):
@@ -177,6 +180,13 @@ class WorkUnit(object):
 
     def __ge__(self, other):
         return not (self < other)
+
+
+class ShutdownWorkUnit(WorkUnit):
+    # used to shutdown processors
+    # must be comparable to other work units to go through the priority queue
+    def __init__(self):
+        super().__init__(None, float("inf"), None, None, None)
 
 
 class PipelineSyncManager(multiprocessing.managers.SyncManager):
@@ -223,7 +233,8 @@ class ParallelSequencePipeline(object):
         elif not isinstance(priority_lanes, list):
             priority_lanes = list(priority_lanes)
         self.max_priority = len(priority_lanes)
-        lane_priorities = []
+        self.n_lanes = 0
+        self.lane_priorities = []
         for priority, priority_n_lanes in enumerate(priority_lanes):
             if not isinstance(priority_n_lanes, int):
                 raise TypeError(f"invalid number of lanes: {priority_n_lanes!r}")
@@ -232,8 +243,8 @@ class ParallelSequencePipeline(object):
                     f"number of lanes for priority {priority} must be greater "
                     "than or equal to one"
                 )
-            lane_priorities.extend([priority for i in range(priority_n_lanes)])
-        self.n_lanes = len(lane_priorities)
+            self.n_lanes += priority_n_lanes
+            self.lane_priorities.extend([priority for i in range(priority_n_lanes)])
         if n_processors is None:
             self.n_processors = self.mp_context.cpu_count()
         else:
@@ -264,7 +275,7 @@ class ParallelSequencePipeline(object):
                     self.work_unit_input_queue,
                 ),
             )
-            for lane, priority in enumerate(lane_priorities)
+            for lane, priority in enumerate(self.lane_priorities)
         ]
         self.processors = [
             self.mp_context.Process(
@@ -321,27 +332,27 @@ class ParallelSequencePipeline(object):
         serial = self.job_output_queue.get()
         return self.active_jobs.pop(serial)
 
-    def close(self):
-        LOG.info("closing producer input queues")
-        for job_input_queue in self.job_input_queues:
-            job_input_queue.close()
+    def shutdown(self):
+        LOG.info(f"pipeline is shutting down @pid={os.getpid()}")
+        LOG.info("sending shutdown message to producers")
+        for priority in self.lane_priorities:
+            self.job_input_queues[priority].put(None)
         LOG.info("calling join() on producers")
         for proc in self.producers:
             proc.join()
-        LOG.info("closing processors input queue")
-        self.work_unit_input_queue.close()
+        LOG.info("sending shutdown message to processors")
+        for _ in range(self.n_processors):
+            self.work_unit_input_queue.put(ShutdownWorkUnit())
         LOG.info("calling join() on processors")
         for proc in self.processors:
             proc.join()
-        LOG.info("closing consumer input queues")
-        for queue in self.work_unit_output_queues:
-            queue.close()
+        LOG.info("sending shutdown message to consumers")
+        for work_unit_output_queue in self.work_unit_output_queues:
+            work_unit_output_queue.put(None)
         LOG.info("calling join() on consumers")
         for proc in self.consumers:
             proc.join()
-        LOG.info("closing output queue")
-        self.job_output_queue.close()
-        LOG.info(f"pipeline closed")
+        LOG.info(f"pipeline has been shutdown @pid={os.getpid()}")
 
 
 def _log_gen_exc(gen, logmsg):
@@ -363,37 +374,47 @@ def produce(producer, lane, job_input_queue, active_jobs, work_unit_input_queue)
         logmsg = f"[{producer}] raised exception while producing work units for [{job}]"
         for work_unit_data in _log_gen_exc(producer.produce(job.data), logmsg):
             work_unit = WorkUnit(
-                lane=lane,
                 priority=job.priority,
-                serial=next(work_unit_serial),
                 job_serial=job_serial,
+                serial=next(work_unit_serial),
+                lane=lane,
                 data=work_unit_data,
             )
             job.status.incr_produced()
             work_unit_input_queue.put(work_unit)
         job.status.stopped_producing()
         job_serial = job_input_queue.get()
-    LOG.info(f"produce() ended @pid={os.getpid()}")
+    LOG.info(f"produce() is shutting down @pid={os.getpid()}")
+    try:
+        producer.shutdown()
+    except:  # noqa E722
+        LOG.exception(f"[{producer}] raised exception while shutting down")
+    LOG.info(f"produce() has been shutdown @pid={os.getpid()}")
 
 
 def process(processor, work_unit_input_queue, active_jobs, work_unit_output_queues):
     processor.init()
     LOG.info(f"process() starting @pid={os.getpid()}")
     work_unit = work_unit_input_queue.get()
-    while work_unit is not None:
+    while not isinstance(work_unit, ShutdownWorkUnit):
         if LOG.isEnabledFor(logging.DEBUG):
             LOG.debug(f"processing {work_unit}")
-        job = active_jobs[work_unit.job_serial]
-        try:
-            work_unit.result = processor.process(job.data, work_unit.data)
-            job.status.incr_processed()
-        except Exception as exception:  # noqa E722
-            work_unit.exception = exception # traceback.format_exc()
-            LOG.error(f"[{processor}] failed to process [{work_unit}]")
-            job.status.incr_failed()
-        work_unit_output_queues[work_unit.lane].put(work_unit)
-        work_unit = work_unit_input_queue.get()
-    LOG.info(f"process() ended @pid={os.getpid()}")
+            job = active_jobs[work_unit.job_serial]
+            try:
+                work_unit.result = processor.process(job.data, work_unit.data)
+                job.status.incr_processed()
+            except Exception as exception:  # noqa E722
+                work_unit.exception = exception  # traceback.format_exc()
+                LOG.error(f"[{processor}] failed to process [{work_unit}]")
+                job.status.incr_failed()
+            work_unit_output_queues[work_unit.lane].put(work_unit)
+            work_unit = work_unit_input_queue.get()
+    LOG.info(f"process() is shutting down @pid={os.getpid()}")
+    try:
+        processor.shutdown()
+    except:  # noqa E722
+        LOG.exception(f"[{processor}] raised exception while shutting down")
+    LOG.info(f"process() has been shutdown @pid={os.getpid()}")
 
 
 def consume(
@@ -419,7 +440,12 @@ def consume(
         job.status.incr_consumed()
         if not job.status.running:
             job_output_queue.put(job.serial)
-    LOG.info(f"consume() finished @pid={os.getpid()}")
+    LOG.info(f"consume() is shutting down @pid={os.getpid()}")
+    try:
+        consumer.shutdown()
+    except:  # noqa E722
+        LOG.exception(f"[{consumer}] raised exception while shutting down")
+    LOG.info(f"consume() has been shutdown @pid={os.getpid()}")
 
 
 def get_done_work_units(processed):
