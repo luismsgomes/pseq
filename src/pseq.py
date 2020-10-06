@@ -147,9 +147,9 @@ class WorkUnit(object):
         result = "None" if self.result is None else "<...>"
         exception = "None" if self.exception is None else "<...>"
         return (
-            f"WorkUnit {self.priority}!{self.lane}:{self.serial} "
-            f"job_serial={self.job_serial} data={data} result={result} "
-            f"exception={exception}"
+            f"WorkUnit priority={self.priority}, lane={self.lane}, "
+            f"serial={self.serial}, job_serial={self.job_serial}, "
+            f"data={data}, result={result}, exception={exception}"
         )
 
     def __eq__(self, other):
@@ -321,9 +321,27 @@ class ParallelSequencePipeline(object):
         serial = self.job_output_queue.get()
         return self.active_jobs.pop(serial)
 
-    def join(self):
-        for proc in itertools.chain(self.producers, self.processors, self.consumers):
+    def close(self):
+        LOG.info("closing producer input queues")
+        for job_input_queue in self.job_input_queues:
+            job_input_queue.close()
+        LOG.info("calling join() on producers")
+        for proc in self.producers:
             proc.join()
+        LOG.info("closing processors input queue")
+        self.work_unit_input_queue.close()
+        LOG.info("calling join() on processors")
+        for proc in self.processors:
+            proc.join()
+        LOG.info("closing consumer input queues")
+        for queue in self.work_unit_output_queues:
+            queue.close()
+        LOG.info("calling join() on consumers")
+        for proc in self.consumers:
+            proc.join()
+        LOG.info("closing output queue")
+        self.job_output_queue.close()
+        LOG.info(f"pipeline closed")
 
 
 def _log_gen_exc(gen, logmsg):
@@ -335,6 +353,7 @@ def _log_gen_exc(gen, logmsg):
 
 def produce(producer, lane, job_input_queue, active_jobs, work_unit_input_queue):
     producer.init()
+    LOG.info(f"produce() starting @pid={os.getpid()}")
     work_unit_serial = itertools.count(start=1)
     job_serial = job_input_queue.get()
     while job_serial is not None:
@@ -354,22 +373,27 @@ def produce(producer, lane, job_input_queue, active_jobs, work_unit_input_queue)
             work_unit_input_queue.put(work_unit)
         job.status.stopped_producing()
         job_serial = job_input_queue.get()
+    LOG.info(f"produce() ended @pid={os.getpid()}")
 
 
 def process(processor, work_unit_input_queue, active_jobs, work_unit_output_queues):
     processor.init()
+    LOG.info(f"process() starting @pid={os.getpid()}")
     work_unit = work_unit_input_queue.get()
     while work_unit is not None:
+        if LOG.isEnabledFor(logging.DEBUG):
+            LOG.debug(f"processing {work_unit}")
         job = active_jobs[work_unit.job_serial]
         try:
             work_unit.result = processor.process(job.data, work_unit.data)
             job.status.incr_processed()
-        except:  # noqa E722
-            work_unit.exception = traceback.format_exc()
-            LOG.exception(f"[{processor}] failed to process [{work_unit}]")
+        except Exception as exception:  # noqa E722
+            work_unit.exception = exception # traceback.format_exc()
+            LOG.error(f"[{processor}] failed to process [{work_unit}]")
             job.status.incr_failed()
         work_unit_output_queues[work_unit.lane].put(work_unit)
         work_unit = work_unit_input_queue.get()
+    LOG.info(f"process() ended @pid={os.getpid()}")
 
 
 def consume(
@@ -380,6 +404,7 @@ def consume(
     require_in_order,
 ):
     consumer.init()
+    LOG.info(f"consume() starting @pid={os.getpid()}")
     work_units = get_done_work_units(work_unit_output_queue)
     if require_in_order:
         work_units = arrange_work_units_in_order(work_units)
@@ -394,6 +419,7 @@ def consume(
         job.status.incr_consumed()
         if not job.status.running:
             job_output_queue.put(job.serial)
+    LOG.info(f"consume() finished @pid={os.getpid()}")
 
 
 def get_done_work_units(processed):
