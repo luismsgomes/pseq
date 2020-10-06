@@ -24,9 +24,6 @@ class TimeProducer(Producer):
         for _ in range(job_data.n_units):
             yield ChunkData(random() * 3)
 
-    def shutdown(self):
-        print(f"  TimeProducer.shutdown() @pid={getpid()}")
-
 
 class TimeProcessor(Processor):
     def __init__(self):
@@ -46,9 +43,6 @@ class TimeProcessor(Processor):
         if choice([True, False, False, False]):
             raise Exception("example exception")
         return ProcessedChunkData(secs_slept)
-
-    def shutdown(self):
-        print(f"  TimeProcessor.shutdown() @pid={getpid()}")
 
 
 class TimeConsumer(Consumer):
@@ -71,9 +65,6 @@ class TimeConsumer(Consumer):
             + f"    exception={exception!r}\n"
             + f"  ) @pid={getpid()}"
         )
-
-    def shutdown(self):
-        print(f"  TimeConsumer.shutdown() @pid={getpid()}")
 
 
 def main():
@@ -110,9 +101,9 @@ def main():
             print("  ", job)
         if not any(job.status.running for job in jobs):
             break
-
-    print(f"calling pipeline.shutdown() @pid={getpid()}")
-    pipeline.shutdown()
+    print("calling pipeline.join()")
+    pipeline.join()
+    print("main() has finished")
 
 
 if __name__ == "__main__":

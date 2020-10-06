@@ -15,32 +15,23 @@ LOG = logging.getLogger(__name__)
 
 
 class Job(object):
-    def __init__(self, lane, priority, serial, data, status):
-        self.lane = lane
+    def __init__(self, priority, serial, data, status):
         self.priority = priority
         self.serial = serial
         self.data = data
         self.status = status
 
     def __str__(self):
-        return f"Job {self.priority}!{self.lane}:{self.serial}, {self.status}"
+        return f"Job {self.serial}:{self.priority}, {self.status}"
 
     def __eq__(self, other):
-        return (
-            other.lane == self.lane
-            and other.priority == self.priority
-            and other.serial == self.serial
-        )
+        return (self.priority, self.serial) == (other.priority, other.serial)
 
     def __ne__(self, other):
         return not (self == other)
 
     def __lt__(self, other):
-        return (
-            self.priority < other.priority
-            or self.priority == other.priority
-            and self.serial < other.serial
-        )
+        return (self.priority, self.serial) < (other.priority, other.serial)
 
     def __le__(self, other):
         return (self < other) or (self == other)
@@ -161,12 +152,39 @@ class WorkUnit(object):
             f"exception={exception}"
         )
 
+    def __eq__(self, other):
+        return (self.priority, self.serial, self.job_serial) == (
+            other.priority,
+            other.serial,
+            other.job_serial,
+        )
+
+    def __ne__(self, other):
+        return not (self == other)
+
+    def __lt__(self, other):
+        return (self.priority, self.serial, self.job_serial) < (
+            other.priority,
+            other.serial,
+            other.job_serial,
+        )
+
+    def __le__(self, other):
+        return (self < other) or (self == other)
+
+    def __gt__(self, other):
+        return not (self <= other)
+
+    def __ge__(self, other):
+        return not (self < other)
+
 
 class PipelineSyncManager(multiprocessing.managers.SyncManager):
     pass
 
 
 PipelineSyncManager.register("PriorityQueue", queue.PriorityQueue)
+PipelineSyncManager.register("Status", Status)
 
 
 class ParallelSequencePipeline(object):
@@ -225,12 +243,12 @@ class ParallelSequencePipeline(object):
                 raise ValueError("n_processors must be greater than or equal to one")
             self.n_processors = n_processors
         self.require_in_order = True if require_in_order is None else require_in_order
-        self.job_serials = [itertools.count(start=1) for _ in range(self.n_lanes)]
+        self.job_serial = itertools.count(start=1)
         self.job_input_queues = [
             self.mp_context.Queue() for _ in range(self.max_priority)
         ]
-        self.job_output_queue = self.mp_context.PriorityQueue()
-        self.work_unit_input_queue = self.mp_context.PriorityQueue()
+        self.job_output_queue = self.mp_manager.PriorityQueue()
+        self.work_unit_input_queue = self.mp_manager.PriorityQueue()
         self.work_unit_output_queues = [
             self.mp_context.Queue() for _ in range(self.n_lanes)
         ]
@@ -281,14 +299,13 @@ class ParallelSequencePipeline(object):
     def __str__(self):
         return f"{self.__class__.__name__} pid={os.getpid()} ppid={os.getppid()}"
 
-    def submit(self, priority, job_data):
+    def submit(self, job_data, priority=0):
         if not 0 <= priority < self.max_priority:
             raise ValueError(
                 f"invalid priority value ({priority}); expected 0 <= priority "
                 f"< {self.max_priority}"
             )
         job = Job(
-            lane=None,  # will be assigned immediately before given to a producer
             priority=priority,
             serial=next(self.job_serial),
             data=job_data,
@@ -303,6 +320,10 @@ class ParallelSequencePipeline(object):
             return None
         serial = self.job_output_queue.get()
         return self.active_jobs.pop(serial)
+
+    def join(self):
+        for proc in itertools.chain(self.producers, self.processors, self.consumers):
+            proc.join()
 
 
 def _log_gen_exc(gen, logmsg):
@@ -332,7 +353,6 @@ def produce(producer, lane, job_input_queue, active_jobs, work_unit_input_queue)
             job.status.incr_produced()
             work_unit_input_queue.put(work_unit)
         job.status.stopped_producing()
-        job_input_queue.task_done()
         job_serial = job_input_queue.get()
 
 
@@ -349,7 +369,6 @@ def process(processor, work_unit_input_queue, active_jobs, work_unit_output_queu
             LOG.exception(f"[{processor}] failed to process [{work_unit}]")
             job.status.incr_failed()
         work_unit_output_queues[work_unit.lane].put(work_unit)
-        work_unit_input_queue.task_done()
         work_unit = work_unit_input_queue.get()
 
 
@@ -381,7 +400,6 @@ def get_done_work_units(processed):
     work_unit = processed.get()
     while work_unit is not None:
         yield work_unit
-        processed.task_done()
         work_unit = processed.get()
 
 
