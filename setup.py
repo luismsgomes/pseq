@@ -3,7 +3,7 @@ from setuptools import setup
 # https://setuptools.readthedocs.io/en/latest/
 setup(
     name="pseq",
-    version="2.0.0",
+    version="2.0.1",
     description="A framework for parallel processing of sequences.",
     long_description=open("README.md", "rt").read(),
     url="https://github.com/luismsgomes/pseq",
