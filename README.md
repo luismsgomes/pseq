@@ -19,7 +19,7 @@ class:
 These concepts/objects are the building blocks of a
 `ParallelSequenceProcessor`, which is depicted below.
 
-![](pseq2.svg)
+![](https://raw.githubusercontent.com/luismsgomes/pseq/master/pseq2.svg)
 
 The `ParallelSequenceProcessor` in this figure has been configured with
 two *lanes* for priority `0` (lanes 1 and 2) and a single *lane* for
