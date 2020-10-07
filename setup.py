@@ -6,6 +6,7 @@ setup(
     version="2.0.1",
     description="A framework for parallel processing of sequences.",
     long_description=open("README.md", "rt").read(),
+    long_description_content_type="text/markdown",
     url="https://github.com/luismsgomes/pseq",
     author="Luís Gomes",
     author_email="luismsgomes@gmail.com",
