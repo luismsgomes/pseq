@@ -3,7 +3,6 @@ import logging
 import multiprocessing
 import multiprocessing.managers
 import queue
-import os
 
 
 __version__ = "2.1.1"
@@ -100,7 +99,7 @@ class Component(object):
         pass
 
     def __str__(self):
-        return f"{self.__class__.__name__} pid={os.getpid()} ppid={os.getppid()}"
+        return f"{self.__class__.__name__}"
 
 
 class Producer(Component):
@@ -291,7 +290,7 @@ class ParallelSequencePipeline(object):
             proc.start()
 
     def __str__(self):
-        return f"{self.__class__.__name__} pid={os.getpid()} ppid={os.getppid()}"
+        return f"{self.__class__.__name__}"
 
     def submit(self, job_data, priority=0):
         if not 0 <= priority < self.max_priority:
@@ -317,27 +316,27 @@ class ParallelSequencePipeline(object):
             return None
 
     def shutdown(self):
-        LOG.info(f"pipeline is shutting down @pid={os.getpid()}")
-        LOG.info("sending shutdown message to producers")
+        LOG.info(f"[{self}] is shutting down")
+        LOG.info(f"[{self}] sending shutdown message to producers")
         for priority in self.lane_priorities:
             self.job_input_queues[priority].put(None)
-        LOG.info("calling join() on producers")
+        LOG.info(f"[{self}] calling join() on producers")
         for proc in self.producers:
             proc.join()
-        LOG.info("sending shutdown message to processors")
+        LOG.info(f"[{self}] sending shutdown message to processors")
         for _ in range(self.n_processors):
             self.work_unit_input_queue.put(ShutdownWorkUnit())
-        LOG.info("calling join() on processors")
+        LOG.info(f"[{self}] calling join() on processors")
         for proc in self.processors:
             proc.join()
-        LOG.info("sending shutdown message to consumers")
+        LOG.info(f"[{self}] sending shutdown message to consumers")
         for work_unit_output_queue in self.work_unit_output_queues:
             work_unit_output_queue.put(None)
-        LOG.info("calling join() on consumers")
+        LOG.info(f"[{self}] calling join() on consumers")
         for proc in self.consumers:
             proc.join()
         self.job_output_queue.put((float("inf"), None))
-        LOG.info(f"pipeline has been shutdown @pid={os.getpid()}")
+        LOG.info(f"[{self}] has been shutdown")
 
 
 def _log_gen_exc(gen, logmsg):
@@ -349,7 +348,7 @@ def _log_gen_exc(gen, logmsg):
 
 def produce(producer, lane, job_input_queue, active_jobs, work_unit_input_queue):
     producer.init()
-    LOG.info(f"produce() starting @pid={os.getpid()}")
+    LOG.info(f"[{producer}] starting")
     work_unit_serial = itertools.count(start=1)
     job_serial = job_input_queue.get()
     while job_serial is not None:
@@ -369,17 +368,17 @@ def produce(producer, lane, job_input_queue, active_jobs, work_unit_input_queue)
             work_unit_input_queue.put(work_unit)
         job.status.stopped_producing()
         job_serial = job_input_queue.get()
-    LOG.info(f"produce() is shutting down @pid={os.getpid()}")
+    LOG.info(f"[{producer}] is shutting down")
     try:
         producer.shutdown()
     except:  # noqa E722
         LOG.exception(f"[{producer}] raised exception while shutting down")
-    LOG.info(f"produce() has been shutdown @pid={os.getpid()}")
+    LOG.info(f"[{producer}] has been shutdown")
 
 
 def process(processor, work_unit_input_queue, active_jobs, work_unit_output_queues):
     processor.init()
-    LOG.info(f"process() starting @pid={os.getpid()}")
+    LOG.info(f"[{processor}] starting")
     work_unit = work_unit_input_queue.get()
     while not isinstance(work_unit, ShutdownWorkUnit):
         if LOG.isEnabledFor(logging.DEBUG):
@@ -394,12 +393,12 @@ def process(processor, work_unit_input_queue, active_jobs, work_unit_output_queu
                 job.status.incr_failed()
             work_unit_output_queues[work_unit.lane].put(work_unit)
             work_unit = work_unit_input_queue.get()
-    LOG.info(f"process() is shutting down @pid={os.getpid()}")
+    LOG.info(f"[{processor}] is shutting down")
     try:
         processor.shutdown()
     except:  # noqa E722
         LOG.exception(f"[{processor}] raised exception while shutting down")
-    LOG.info(f"process() has been shutdown @pid={os.getpid()}")
+    LOG.info(f"[{processor}] has been shutdown")
 
 
 def consume(
@@ -410,7 +409,7 @@ def consume(
     require_in_order,
 ):
     consumer.init()
-    LOG.info(f"consume() starting @pid={os.getpid()}")
+    LOG.info(f"[{consumer}] starting")
     work_units = get_done_work_units(work_unit_output_queue)
     if require_in_order:
         work_units = arrange_work_units_in_order(work_units)
@@ -424,14 +423,18 @@ def consume(
             LOG.exception(f"[{consumer}] failed to consume [{work_unit}] of [{job}]")
         job.status.incr_consumed()
         if not job.status.running:
-            LOG.info(f"[{job}] finished")
+            if job.status.produced != (job.status.processed + job.status.failed) \
+                or job.status.produced != job.status.consumed:
+                LOG.error(f"[{job}] finished with strange work unit counts")
+            else:
+                LOG.info(f"[{job}] finished")
             job_output_queue.put((job.priority, job.serial))
-    LOG.info(f"consume() is shutting down @pid={os.getpid()}")
+    LOG.info(f"[{consumer}] is shutting down")
     try:
         consumer.shutdown()
     except:  # noqa E722
         LOG.exception(f"[{consumer}] raised exception while shutting down")
-    LOG.info(f"consume() has been shutdown @pid={os.getpid()}")
+    LOG.info(f"[{consumer}] has been shutdown")
 
 
 def get_done_work_units(processed):
