@@ -24,23 +24,6 @@ class Job(object):
     def __str__(self):
         return f"Job {self.serial}:{self.priority}, {self.status}"
 
-    def __eq__(self, other):
-        return (self.priority, self.serial) == (other.priority, other.serial)
-
-    def __ne__(self, other):
-        return not (self == other)
-
-    def __lt__(self, other):
-        return (self.priority, self.serial) < (other.priority, other.serial)
-
-    def __le__(self, other):
-        return (self < other) or (self == other)
-
-    def __gt__(self, other):
-        return not (self <= other)
-
-    def __ge__(self, other):
-        return not (self < other)
 
 
 class Status(object):
@@ -329,7 +312,9 @@ class ParallelSequencePipeline(object):
     def fetch(self, wait=False):
         if self.job_output_queue.empty() and not wait:
             return None
-        serial = self.job_output_queue.get()
+        _, serial = self.job_output_queue.get()
+        if serial is None:  # being shutdown
+            return None
         return self.active_jobs.pop(serial)
 
     def shutdown(self):
@@ -352,6 +337,7 @@ class ParallelSequencePipeline(object):
         LOG.info("calling join() on consumers")
         for proc in self.consumers:
             proc.join()
+        self.job_output_queue.put((float("inf"), None))
         LOG.info(f"pipeline has been shutdown @pid={os.getpid()}")
 
 
@@ -439,7 +425,7 @@ def consume(
             LOG.exception(f"[{consumer}] failed to consume [{work_unit}] of [{job}]")
         job.status.incr_consumed()
         if not job.status.running:
-            job_output_queue.put(job.serial)
+            job_output_queue.put((job.priority, job.serial))
     LOG.info(f"consume() is shutting down @pid={os.getpid()}")
     try:
         consumer.shutdown()
