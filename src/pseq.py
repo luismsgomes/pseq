@@ -310,12 +310,11 @@ class ParallelSequencePipeline(object):
         return job
 
     def fetch(self, wait=False):
-        if self.job_output_queue.empty() and not wait:
+        try:
+            _, serial = self.job_output_queue.get(wait)
+            return None if serial is None else self.active_jobs.pop(serial)
+        except queue.Empty:
             return None
-        _, serial = self.job_output_queue.get()
-        if serial is None:  # being shutdown
-            return None
-        return self.active_jobs.pop(serial)
 
     def shutdown(self):
         LOG.info(f"pipeline is shutting down @pid={os.getpid()}")
@@ -425,6 +424,7 @@ def consume(
             LOG.exception(f"[{consumer}] failed to consume [{work_unit}] of [{job}]")
         job.status.incr_consumed()
         if not job.status.running:
+            LOG.info(f"[{job}] finished")
             job_output_queue.put((job.priority, job.serial))
     LOG.info(f"consume() is shutting down @pid={os.getpid()}")
     try:
