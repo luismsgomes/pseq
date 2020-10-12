@@ -381,18 +381,17 @@ def process(processor, work_unit_input_queue, active_jobs, work_unit_output_queu
     LOG.info(f"[{processor}] starting")
     work_unit = work_unit_input_queue.get()
     while not isinstance(work_unit, ShutdownWorkUnit):
-        if LOG.isEnabledFor(logging.DEBUG):
-            LOG.debug(f"processing {work_unit}")
-            job = active_jobs[work_unit.job_serial]
-            try:
-                work_unit.result = processor.process(job.data, work_unit.data)
-                job.status.incr_processed()
-            except Exception as exception:  # noqa E722
-                work_unit.exception = exception  # traceback.format_exc()
-                LOG.error(f"[{processor}] failed to process [{work_unit}]")
-                job.status.incr_failed()
-            work_unit_output_queues[work_unit.lane].put(work_unit)
-            work_unit = work_unit_input_queue.get()
+        LOG.debug(f"processing {work_unit}")
+        job = active_jobs[work_unit.job_serial]
+        try:
+            work_unit.result = processor.process(job.data, work_unit.data)
+            job.status.incr_processed()
+        except Exception as exception:  # noqa E722
+            work_unit.exception = exception  # traceback.format_exc()
+            LOG.error(f"[{processor}] failed to process [{work_unit}]")
+            job.status.incr_failed()
+        work_unit_output_queues[work_unit.lane].put(work_unit)
+        work_unit = work_unit_input_queue.get()
     LOG.info(f"[{processor}] is shutting down")
     try:
         processor.shutdown()
