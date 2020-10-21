@@ -5,7 +5,7 @@ import multiprocessing.managers
 import queue
 
 
-__version__ = "2.1.4"
+__version__ = "2.1.5"
 
 __author__ = "Luís Gomes"
 
