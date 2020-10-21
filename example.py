@@ -68,7 +68,8 @@ class TimeConsumer(Consumer):
     def consume(self, job_data, chunk_data, processed_chunk_data, exception):
         LOG.info(
             "TimeConsumer.consume("
-            + f"chunk_data.secs_to_sleep={chunk_data.secs_to_sleep:.2f},"
+            + f"job_data.n_units={job_data.n_units},"
+            + f" chunk_data.secs_to_sleep={chunk_data.secs_to_sleep:.2f},"
             + " chunk_data.secs_slept="
             + (
                 "None,"

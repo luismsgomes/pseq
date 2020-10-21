@@ -103,17 +103,17 @@ class Component(object):
 
 
 class Producer(Component):
-    def produce(self, data):
+    def produce(self, job_data):
         raise NotImplementedError
 
 
 class Processor(Component):
-    def process(self, data):
+    def process(self, work_unit_data):
         raise NotImplementedError
 
 
 class Consumer(Component):
-    def consume(self, data, result, exception):
+    def consume(self, job_data, work_unit_data, work_unit_result, work_unit_exception):
         raise NotImplementedError
 
 
