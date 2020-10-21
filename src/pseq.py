@@ -108,7 +108,7 @@ class Producer(Component):
 
 
 class Processor(Component):
-    def process(self, work_unit_data):
+    def process(self, job_data, work_unit_data):
         raise NotImplementedError
 
 

@@ -11,9 +11,7 @@ LOG = logging.getLogger("example.py")
 
 JobData = namedtuple("JobData", "n_units")
 
-ChunkData = namedtuple("ChunkData", "secs_to_sleep")
-
-ProcessedChunkData = namedtuple("ProcessedChunkData", "secs_slept")
+WorkUnitData = namedtuple("WorkUnitData", "secs_to_sleep")
 
 
 class TimeProducer(Producer):
@@ -25,9 +23,9 @@ class TimeProducer(Producer):
         LOG.info(f"TimeProducer.init() @pid={getpid()}")
 
     def produce(self, job_data):
-        LOG.info(f"TimeProducer.produce() @pid={getpid()}")
+        LOG.info(f"TimeProducer.produce(job_data={job_data!r}) @pid={getpid()}")
         for _ in range(job_data.n_units):
-            yield ChunkData(random() * 3)
+            yield WorkUnitData(random() * 3)
 
     def shutdown(self):
         LOG.info(f"TimeProducer.shutdown() @pid={getpid()}")
@@ -41,17 +39,17 @@ class TimeProcessor(Processor):
         logging.basicConfig(level=logging.DEBUG)
         LOG.info(f"TimeProcessor.init() @pid={getpid()}")
 
-    def process(self, job_data, chunk_data):
-        secs = chunk_data.secs_to_sleep
+    def process(self, job_data, work_unit_data):
+        secs = work_unit_data.secs_to_sleep
         LOG.info(
-            f"TimeProcessor.process(chunk_data.segs_to_sleep={secs:.2f}) "
+            f"TimeProcessor.process(job_data={job_data!r}, work_unit_data={work_unit_data!r}) "
             f"@pid={getpid()}"
         )
         secs_slept = choice([secs, secs, secs / 2])
         sleep(secs_slept)
         if choice([True, False, False, False]):
             raise Exception("example exception")
-        return ProcessedChunkData(secs_slept)
+        return secs_slept
 
     def shutdown(self):
         LOG.info(f"TimeProcessor.shutdown() @pid={getpid()}")
@@ -65,19 +63,13 @@ class TimeConsumer(Consumer):
         logging.basicConfig(level=logging.DEBUG)
         LOG.info(f"TimeConsumer.init() @pid={getpid()}")
 
-    def consume(self, job_data, chunk_data, processed_chunk_data, exception):
+    def consume(self, job_data, work_unit_data, work_unit_result, work_unit_exception):
         LOG.info(
             "TimeConsumer.consume("
-            + f"job_data.n_units={job_data.n_units},"
-            + f" chunk_data.secs_to_sleep={chunk_data.secs_to_sleep:.2f},"
-            + " chunk_data.secs_slept="
-            + (
-                "None,"
-                if processed_chunk_data is None
-                else f"{processed_chunk_data.secs_slept:.2f},"
-            )
-            + f" exception={exception!r}"
-            + f") @pid={getpid()}"
+            + f"job_data={job_data!r}, "
+            + f"work_unit_data={work_unit_data!r}, "
+            + f"work_unit_result={work_unit_result!r}, "
+            + f"work_unit_exception={work_unit_exception!r}) @pid={getpid()}"
         )
 
     def shutdown(self):
