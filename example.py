@@ -1,6 +1,6 @@
 import logging
 from os import getpid
-from pseq import ParallelSequencePipeline, Producer, Processor, Consumer
+from pseq import ParallelSequencePipeline, BaseProducer, BaseProcessor, BaseConsumer
 from random import random, choice
 from time import sleep
 from collections import namedtuple
@@ -14,7 +14,7 @@ JobData = namedtuple("JobData", "n_units")
 WorkUnitData = namedtuple("WorkUnitData", "secs_to_sleep")
 
 
-class TimeProducer(Producer):
+class TimeProducer(BaseProducer):
     def __init__(self):
         LOG.info(f"TimeProducer.__init__() @pid={getpid()}")
 
@@ -31,7 +31,7 @@ class TimeProducer(Producer):
         LOG.info(f"TimeProducer.shutdown() @pid={getpid()}")
 
 
-class TimeProcessor(Processor):
+class TimeProcessor(BaseProcessor):
     def __init__(self):
         LOG.info(f"TimeProcessor.__init__() @pid={getpid()}")
 
@@ -55,7 +55,7 @@ class TimeProcessor(Processor):
         LOG.info(f"TimeProcessor.shutdown() @pid={getpid()}")
 
 
-class TimeConsumer(Consumer):
+class TimeConsumer(BaseConsumer):
     def __init__(self):
         LOG.info(f"TimeConsumer.__init__() @pid={getpid()}")
 

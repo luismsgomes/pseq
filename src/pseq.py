@@ -102,17 +102,17 @@ class Component(object):
         return f"{self.__class__.__name__}"
 
 
-class Producer(Component):
+class BaseProducer(Component):
     def produce(self, job_data):
         raise NotImplementedError
 
 
-class Processor(Component):
+class BaseProcessor(Component):
     def process(self, job_data, work_unit_data):
         raise NotImplementedError
 
 
-class Consumer(Component):
+class BaseConsumer(Component):
     def consume(self, job_data, work_unit_data, work_unit_result, work_unit_exception):
         raise NotImplementedError
 
@@ -204,12 +204,12 @@ class ParallelSequencePipeline(object):
             self.mp_context = mp_context
         self.mp_manager = PipelineSyncManager(ctx=self.mp_context)
         self.mp_manager.start()
-        if not isinstance(producer, Producer):
-            raise TypeError("producer not an instance of Producer")
-        if not isinstance(processor, Processor):
-            raise TypeError("processor not an instance of Processor")
-        if not isinstance(consumer, Consumer):
-            raise TypeError("consumer not an instance of Consumer")
+        if not isinstance(producer, BaseProducer):
+            raise TypeError("producer not an instance of BaseProducer")
+        if not isinstance(processor, BaseProcessor):
+            raise TypeError("processor not an instance of BaseProcessor")
+        if not isinstance(consumer, BaseConsumer):
+            raise TypeError("consumer not an instance of BaseConsumer")
         if priority_lanes is None:
             priority_lanes = [1]  # compatible with old API
         elif not isinstance(priority_lanes, list):
@@ -463,8 +463,8 @@ def arrange_work_units_in_order(work_units):
 __all__ = [
     "Status",
     "Component",
-    "Producer",
-    "Processor",
-    "Consumer",
+    "BaseProducer",
+    "BaseProcessor",
+    "BaseConsumer",
     "ParallelSequencePipeline",
 ]
