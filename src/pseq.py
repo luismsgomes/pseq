@@ -364,6 +364,7 @@ def produce(producer, lane, job_input_queue, active_jobs, work_unit_input_queue)
                 lane=lane,
                 data=work_unit_data,
             )
+            LOG.debug(f"[{producer}] produced [{work_unit}]")
             job.status.incr_produced()
             work_unit_input_queue.put(work_unit)
         job.status.stopped_producing()
@@ -381,7 +382,7 @@ def process(processor, work_unit_input_queue, active_jobs, work_unit_output_queu
     LOG.info(f"[{processor}] starting")
     work_unit = work_unit_input_queue.get()
     while not isinstance(work_unit, ShutdownWorkUnit):
-        LOG.debug(f"processing {work_unit}")
+        LOG.debug(f"[{processor}] is processing [{work_unit}]")
         job = active_jobs[work_unit.job_serial]
         try:
             work_unit.result = processor.process(job.data, work_unit.data)
@@ -413,6 +414,7 @@ def consume(
     if require_in_order:
         work_units = arrange_work_units_in_order(work_units)
     for work_unit in work_units:
+        LOG.debug(f"[{consumer}] is consuming [{work_unit}]")
         job = active_jobs[work_unit.job_serial]
         try:
             consumer.consume(
